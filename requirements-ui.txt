@@ -1,0 +1,2 @@
+-r requirements-network.txt
+streamlit>=1.41,<2

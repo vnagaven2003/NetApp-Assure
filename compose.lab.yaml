@@ -1,0 +1,91 @@
+name: netapp-assure-lab
+services:
+  r1:
+    image: quay.io/frrouting/frr:10.5.2
+    hostname: r1
+    command: [sh, -c, "ip route del default && exec /usr/lib/frr/docker-start"]
+    cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    volumes:
+      - ./lab/daemons:/etc/frr/daemons:ro
+      - ./lab/r1.conf:/etc/frr/frr.conf:ro
+      - ./lab/vtysh.conf:/etc/frr/vtysh.conf:ro
+    mem_limit: 192m
+    networks:
+      client_lan:
+        ipv4_address: 10.101.1.2
+        interface_name: eth0
+      transit:
+        ipv4_address: 10.101.12.2
+        interface_name: eth1
+  r2:
+    image: quay.io/frrouting/frr:10.5.2
+    hostname: r2
+    command: [sh, -c, "ip route del default && exec /usr/lib/frr/docker-start"]
+    cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls:
+      net.ipv4.ip_forward: "1"
+    volumes:
+      - ./lab/daemons:/etc/frr/daemons:ro
+      - ./lab/r2.conf:/etc/frr/frr.conf:ro
+      - ./lab/vtysh.conf:/etc/frr/vtysh.conf:ro
+    mem_limit: 192m
+    networks:
+      server_lan:
+        ipv4_address: 10.101.2.2
+        interface_name: eth0
+      transit:
+        ipv4_address: 10.101.12.3
+        interface_name: eth1
+  client:
+    build:
+      context: .
+      dockerfile: lab/host.Dockerfile
+    cap_add: [NET_ADMIN]
+    command: [sh, -c, "ip route replace default via 10.101.1.2 && exec sleep infinity"]
+    mem_limit: 96m
+    networks:
+      client_lan:
+        ipv4_address: 10.101.1.10
+        interface_name: eth0
+  api-net:
+    build:
+      context: .
+      dockerfile: lab/host.Dockerfile
+    cap_add: [NET_ADMIN]
+    command: [sh, -c, "ip route replace default via 10.101.2.2 && exec sleep infinity"]
+    mem_limit: 96m
+    networks:
+      server_lan:
+        ipv4_address: 10.101.2.10
+        interface_name: eth0
+  api:
+    build: .
+    network_mode: service:api-net
+    depends_on: [api-net]
+    mem_limit: 256m
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+networks:
+  client_lan:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 10.101.1.0/24
+  transit:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 10.101.12.0/24
+  server_lan:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 10.101.2.0/24

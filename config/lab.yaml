@@ -1,0 +1,20 @@
+# Test expectations for compose.lab.yaml; this does not reconfigure the lab.
+scenario: all
+routers:
+  r1:
+    peer: 2.2.2.2
+    remote_route: 10.101.2.0/24
+  r2:
+    peer: 1.1.1.1
+    remote_route: 10.101.1.0/24
+application:
+  host: 10.101.2.10
+  port: 8000
+  endpoint: /health
+  expected_status: 200
+  expected_json:
+    status: ok
+expected_hops: [10.101.1.2, 10.101.12.3, 10.101.2.10]
+timeouts:
+  request_seconds: 3
+  recovery_seconds: 90

@@ -8,7 +8,49 @@ A small read-only FastAPI inventory service, API contract tests, and Docker pack
 
 A separate FRR lab, baseline verification script, and pyATS link interruption and application-stop scenarios are included. Groq analysis and an HTML report are implemented; live provider validation requires your API key in the invoking terminal. AI analysis is required to complete the workflow. A failed AI call leaves the report explicitly incomplete while preserving measured test results. AI explains evidence, not test outcomes.
 
-## Streamlit dashboard
+## Screenshots
+
+These screenshots show the local Docker lab dashboard and successful baseline and
+application runs. They do not demonstrate a completed `all` run or physical device compatibility.
+
+### Dashboard controls
+
+Choose a scenario and check container readiness. A credential marked "Set" only
+indicates that a key is present; the AI request verifies provider access.
+
+![Dashboard scenario selection and readiness](docs/screenshots/User%20attachment.png)
+
+### Baseline report
+
+Baseline tests and AI analysis completed successfully. Fault scenarios were not
+selected, so no link recovery measurement is expected.
+
+![Baseline HTML report with healthy checks](docs/screenshots/Report_screenshot.png)
+
+### Baseline AI interpretation
+
+AI explanations need review: the screenshot's "no packet loss" statement exceeds
+what this traceroute check establishes. The check confirms the observed hop path,
+not a packet-loss measurement.
+
+![Baseline AI interpretation and evidence references](docs/screenshots/Report_screenshot1.png)
+
+### Application scenario results
+
+The application run passed, AI analysis completed, and final API health was healthy.
+"Link recovery: Not recorded" is expected for this application-only run.
+
+![Successful application scenario results](docs/screenshots/results_interface.png)
+
+### Application AI explanation
+
+The saved evidence records API unavailability during the intentional stop, healthy
+network checks during that fault, and API recovery after restart. These are sampled
+checks, not continuous monitoring of every moment during the outage.
+
+![Application outage and recovery explanation](docs/screenshots/AI_Explanation.png)
+
+## Running the dashboard
 
 To keep the dashboard running while using your Ubuntu terminal, activate the
 virtual environment and launch it in the background:

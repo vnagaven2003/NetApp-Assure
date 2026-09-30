@@ -1,211 +1,186 @@
 # NetApp Assure
 
-An AI-assisted network and application regression testing project, built independently of TestForge.
+An AI-assisted network and application regression testing project. It uses a local Docker lab to verify routing and API health, introduce controlled failures, check recovery, and explain the recorded evidence through a Streamlit dashboard.
 
-## Current milestone
+## Features
 
-A small read-only FastAPI inventory service, API contract tests, and Docker packaging. The inventory is sample data, not discovered devices. `/health` measures application liveness only.
+- Automated OSPF neighbor, route, traceroute, and HTTP response checks.
+- Selectable baseline, network-link failure, application failure, and combined scenarios.
+- Restoration and recovery checks after each injected fault.
+- Validated YAML test expectations and a configuration snapshot for each pipeline run.
+- Required Groq AI analysis with evidence references and explicit failure reporting.
+- Streamlit dashboard with background test execution, scrollable logs, and saved results.
+- Downloadable HTML reports that separate measured observations from AI interpretation.
+- GitHub Actions checks for API contracts, mocked AI/pipeline behavior, and the standalone Docker API.
 
-A separate FRR lab, baseline verification script, and pyATS link interruption and application-stop scenarios are included. Groq analysis and an HTML report are implemented; live provider validation requires your API key in the invoking terminal. AI analysis is required to complete the workflow. A failed AI call leaves the report explicitly incomplete while preserving measured test results. AI explains evidence, not test outcomes.
+## Use Cases
 
-## Screenshots
+- **Regression testing:** repeat network and application checks after changes to the local lab.
+- **Failure diagnosis practice:** distinguish a broken network path from an application outage on a healthy network.
+- **Recovery verification:** confirm service returns after restoring a router link or restarting the API.
+- **Learning and demonstration:** practice Python, pyATS, OSPF, Docker, and evidence-based troubleshooting without physical routers.
 
-These screenshots show the local Docker lab dashboard and successful baseline and
-application runs. They do not demonstrate a completed `all` run or physical device compatibility.
+## Tech Stack
 
-### Dashboard controls
+| Technology | Role |
+| --- | --- |
+| Python 3.12 | Test orchestration, configuration, and reporting |
+| pyATS | Network test setup, scenarios, and cleanup |
+| FRRouting (FRR) | Two virtual routers running OSPF |
+| Docker and Docker Compose | Reproducible local network and application lab |
+| FastAPI and Uvicorn | Sample API application |
+| Streamlit | Dashboard and report viewer |
+| Groq API | Hosted AI interpretation of selected test evidence |
+| pytest and HTTPX | API tests and simulated provider/pipeline tests |
+| YAML and Pydantic | Configuration and validation |
+| Git and GitHub Actions | Version control and automated checks |
+| Ubuntu / WSL2 | Linux execution environment |
 
-Choose a scenario and check container readiness. A credential marked "Set" only
-indicates that a key is present; the AI request verifies provider access.
+## How It Works
 
-![Dashboard scenario selection and readiness](docs/screenshots/User%20attachment.png)
+```text
+Test client --> FRR Router 1 --> FRR Router 2 --> Python API
+                        OSPF routing
+```
 
-### Baseline report
+A run validates the configuration, checks baseline health, executes the selected fault scenario, restores the affected component, and checks final health. It then sends selected evidence to Groq and saves the analysis and HTML report.
 
-Baseline tests and AI analysis completed successfully. Fault scenarios were not
-selected, so no link recovery measurement is expected.
+| Scenario | What it tests |
+| --- | --- |
+| `baseline` | Healthy routing, expected network path, and API response; no injected outage |
+| `link` | Baseline, router transit-link interruption, expected API outage, and recovery |
+| `application` | Baseline, API stop while networking remains available, and recovery after restart |
+| `all` | Both failure scenarios in sequence, including baseline and recovery checks |
 
-![Baseline HTML report with healthy checks](docs/screenshots/Report_screenshot.png)
+An intentional outage is expected during fault testing. Tests pass when observations match expectations. AI explains evidence; it does not decide the test outcome or control the lab.
 
-### Baseline AI interpretation
+## Project Structure
 
-AI explanations need review: the screenshot's "no packet loss" statement exceeds
-what this traceroute check establishes. The check confirms the observed hop path,
-not a packet-loss measurement.
+```text
+NetApp-Assure/
+|-- app/                       # Sample FastAPI application
+|-- config/lab.yaml            # Validated test expectations
+|-- lab/                       # FRR configuration and lab host image
+|-- scripts/
+|   |-- start_dashboard.py     # Background dashboard launcher
+|   |-- run_project.py         # Test and AI pipeline
+|   |-- network_suite.py       # pyATS fault and recovery scenarios
+|   |-- check_lab.py           # Routing and API baseline checks
+|   |-- ai_report.py           # Groq analysis and report generation
+|   |-- report_view.py         # HTML report rendering
+|   |-- lab_config.py          # Configuration validation
+|   `-- ...                    # Dashboard and diagnostic helpers
+|-- tests/                     # Automated tests
+|-- docs/screenshots/          # Project screenshots
+|-- .github/workflows/ci.yml   # GitHub Actions workflow
+|-- dashboard.py              # Streamlit interface
+|-- compose.lab.yaml          # Routed FRR test lab
+|-- compose.yaml              # Separate standalone API demo
+|-- Dockerfile                # API image
+|-- requirements*.txt         # Application, test, network, and UI dependencies
+`-- reports/                  # Generated locally; excluded from Git
+```
 
-![Baseline AI interpretation and evidence references](docs/screenshots/Report_screenshot1.png)
+## Installation & Setup
 
-### Application scenario results
+### Prerequisites
 
-The application run passed, AI analysis completed, and final API health was healthy.
-"Link recovery: Not recorded" is expected for this application-only run.
+The development environment is Ubuntu 24.04 on Windows through WSL2, with Python 3.12 and Docker Desktop WSL integration. The launcher and pipeline require Linux. Other environments have not been fully validated.
 
-![Successful application scenario results](docs/screenshots/results_interface.png)
+Install Git, Python 3.12 with `venv` support, and Docker with a Compose version supporting `interface_name`. Verify that `docker compose version` and `docker run --rm hello-world` work in Ubuntu. You also need internet access and your own Groq API key for the required AI stage.
 
-### Application AI explanation
+Run the following commands in an Ubuntu terminal.
 
-The saved evidence records API unavailability during the intentional stop, healthy
-network checks during that fault, and API recovery after restart. These are sampled
-checks, not continuous monitoring of every moment during the outage.
-
-![Application outage and recovery explanation](docs/screenshots/AI_Explanation.png)
-
-## Running the dashboard
-
-To keep the dashboard running while using your Ubuntu terminal, activate the
-virtual environment and launch it in the background:
+### 1. Clone and install dependencies
 
 ```bash
-source ../.venv-wsl/bin/activate
+git clone https://github.com/vnagaven2003/NetApp-Assure.git
+cd NetApp-Assure
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-ui.txt
+```
+
+If Ubuntu reports missing virtual environment support, install it with `sudo apt install python3-venv` and retry creating the environment.
+
+### 2. Configure AI access
+
+Enter your key at the hidden prompt; do not put it in source files or commit it:
+
+```bash
+read -rsp "Groq API key: " GROQ_API_KEY; echo
+export GROQ_API_KEY
+```
+
+The configured default model is `qwen/qwen3.8-27b`. Availability and account permissions can change. To inspect available models or override the default:
+
+```bash
+python scripts/list_ai_models.py
+# Replace MODEL_ID with a model supporting the JSON output required by the script.
+export GROQ_MODEL="MODEL_ID"
+```
+
+Only set `GROQ_MODEL` when overriding the default. Model listing does not guarantee permission to run inference. Selected lab evidence is sent to Groq for analysis.
+
+### 3. Start and verify the lab
+
+Keep Docker running, then execute:
+
+```bash
+docker compose -f compose.lab.yaml up --build -d --wait
+python scripts/run_project.py --validate-config
+python scripts/check_lab.py
+```
+
+The lab uses `10.101.1.0/24`, `10.101.12.0/24`, and `10.101.2.0/24`; avoid conflicting Docker networks. The routed API is accessed through the lab client, not a published host port.
+
+### 4. Launch the dashboard
+
+From the same terminal where the key is exported:
+
+```bash
 python scripts/start_dashboard.py
 ```
 
-Use the terminal where `GROQ_API_KEY` is exported. The launcher inherits the key
-without saving it to disk. If the foreground Streamlit command is already running,
-press Ctrl+C in that terminal before using this launcher. Open http://127.0.0.1:8501.
-The launcher returns your prompt and prints a PID and stop command. Server logs
-are saved in `reports/dashboard-server.log`. This is not automatic startup:
-run the launcher again after Windows restarts or WSL shuts down.
+Open **http://127.0.0.1:8501**. The launcher returns the terminal prompt and prints the server PID and stop command. It inherits the key without saving it to disk. Restart it after Windows restarts or WSL shuts down. If a foreground dashboard already occupies port 8501, stop it with Ctrl+C before using the background launcher.
 
-In Ubuntu, from this project directory, use the terminal where the replacement `GROQ_API_KEY` is exported:
+For later sessions, activate `.venv`, export your key again if needed, start the lab, and launch the dashboard. Server logs are in `reports/dashboard-server.log`.
 
-```bash
-source ../.venv-wsl/bin/activate
-python -m pip install -r requirements-ui.txt
-python -m streamlit run dashboard.py --server.address 127.0.0.1 --server.port 8501
-```
+## Usage
 
-Open http://localhost:8501. Keep Docker and the lab running. Choose a scenario; the Run button launches its checks and required AI analysis as a background process. A live log refreshes every three seconds. Refresh the report list when it finishes, then view or download the result. Earlier standalone reports can also be viewed.
+1. Confirm the dashboard shows the lab containers running and an AI credential set.
+2. Select `baseline` for the first run, or another scenario from the table above.
+3. Click **Run tests and AI analysis** and follow the execution log.
+4. When finished, click **Refresh report list** and select the newest run.
+5. Review **Measured observations**, **AI explanation**, and **Evidence**, or download the HTML report.
 
-The dashboard reads the key from its server environment; it never puts it in the page or process command line. Start it from the terminal holding the key. Browser refresh does not launch a new run. The cached job manager prevents double-click launches, and the pipeline's Linux lock prevents overlapping fault runs across dashboard and CLI. Do not invoke the standalone network suite concurrently. Closing the browser does not stop a run. The dashboard does not start or stop the Docker lab automatically and is intended for localhost only.
+A credential marked **Set** only confirms its presence; the API call validates access. Test status and AI completion are separate. A failed AI request leaves the workflow incomplete while preserving measured evidence.
 
-## Command-line pipeline
+### Command-line alternative
 
-With the Docker lab already running and `GROQ_API_KEY` set in your Ubuntu terminal:
+With the lab running, environment activated, and key exported:
 
 ```bash
-source ../.venv-wsl/bin/activate
-python scripts/run_project.py
+python scripts/run_project.py --scenario baseline
+python scripts/run_project.py --scenario all
 ```
 
-This runs both pyATS fault scenarios, then required AI analysis against only the new run's evidence. Reports are stored separately under `reports/runs/<run-id>/`; open the `report.html` there. `pipeline-status.json` records test and AI process outcomes. Failed tests still receive AI analysis when fresh finished evidence exists; an AI explanation cannot turn failing tests into success. Missing keys stop execution before fault injection. This command does not start Docker or the lab for you.
+Edit `config/lab.yaml` to change expected OSPF peers/routes, HTTP path/status/JSON response, traceroute hops, and timeouts. These settings change test expectations, not router configuration. Use `--config path/to/config.yaml` to select another file. Fault targets remain the fixed Docker lab.
 
-Runs through this command are serialized with a Linux file lock. Do not separately run the fault suite while a pipeline is active. Forced termination may interrupt cleanup; use the restoration commands below and verify baseline health. Individual subprocess operations have timeouts, but the orchestrator does not forcibly kill the suite during its cleanup.
+Each pipeline run saves evidence, a configuration snapshot, AI output, an HTML report, and pipeline status under `reports/runs/<run-id>/`.
 
-If AI fails, retry only the analysis for that run (replace the example directory):
+### Troubleshooting and cleanup
+
+If AI fails, fix the reported model, credential, connectivity, or quota issue and retry analysis without repeating the outage. Replace `<run-id>` with the actual folder name:
 
 ```bash
 NETAPP_REPORT_DIR="$PWD/reports/runs/<run-id>" python scripts/ai_report.py
 ```
 
-The retry updates that run's AI report; `pipeline-status.json` still describes the original pipeline attempt.
+This updates the AI report; `pipeline-status.json` still describes the original pipeline attempt.
 
-## Analyse existing standalone evidence
-
-After running the suite, use the same Ubuntu terminal where you set your replacement `GROQ_API_KEY`:
-
-```bash
-source ../.venv-wsl/bin/activate
-python scripts/ai_report.py
-```
-
-This sends selected evidence from `reports/network-evidence.json` to Groq's chat completion API. It does not send repository files or environment variables as evidence. The key is read from the environment and used only for authentication. Default model: `qwen/qwen3.8-27b`, selected from the model list returned for this setup. Override with `GROQ_MODEL` if your account requires another JSON-capable model. Model listing alone does not verify inference permissions; the live analysis call is still required. Run `python scripts/list_ai_models.py` to inspect the current list.
-
-Open `reports/report.html` in your Windows browser. The separate `reports/ai-report.json` records the source evidence hash, model, explanation, and completion status. The original evidence remains unchanged. On provider errors or invalid evidence references, the command exits unsuccessfully and writes an incomplete report. Retry the command after fixing the issue; you need not repeat fault injection. Reference validation checks that cited fields exist, not that the model's reasoning is correct. Review explanations against measured evidence.
-
-AI integration tests use simulated provider responses, not real model calls. The HTML report separates recorded scenario observations from AI explanations, links findings to expandable evidence, and shows recovery timing. Missing evidence is displayed as unverified, not passing. Full workflow completion is distinct from passing all tests; the original pyATS console remains the authoritative test summary.
-
-To refresh the HTML from saved analysis without calling Groq:
-
-```bash
-python scripts/report_view.py
-```
-
-The saved AI analysis is preserved exactly. Prompt improvements affect only future calls to `ai_report.py`; refreshing the HTML does not silently replace or correct earlier model output.
-
-## Run in Ubuntu
-
-From the parent workspace, activate the existing Linux environment and enter this project:
-
-```bash
-source .venv-wsl/bin/activate
-cd netapp-assure
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Open http://localhost:8000/docs for interactive API documentation. Stop the local server with Ctrl+C before using Docker on the same port.
-
-## Run in Docker
-
-```bash
-docker compose up --build -d --wait
-curl --fail http://localhost:8000/health
-curl --fail http://localhost:8000/devices
-python scripts/smoke_api.py
-docker compose down
-```
-
-Docker publishes the API only on localhost. This first milestone uses a direct connection; it does not yet prove a routed path through FRR.
-
-## API contract
-
-| Endpoint | Expected behaviour |
-| --- | --- |
-| GET /health | 200, `{"status":"ok"}` |
-| GET /devices | 200, two sample FRR router records |
-| GET /devices/1 | 200, matching inventory record |
-| GET /devices/999 | 404, device not found |
-| GET /devices/abc or /devices/0 | 422, invalid identifier |
-| POST /devices | 405, read-only API |
-
-## Routed lab
-
-Run from this project directory in Ubuntu, with Docker Desktop running:
-
-```bash
-docker compose -f compose.lab.yaml up --build -d --wait
-python scripts/check_lab.py
-```
-
-```text
-client             r1                    r2                 API
-10.101.1.10 --- 10.101.1.2            10.101.2.2 --- 10.101.2.10:8000
-                   10.101.12.2 ------ 10.101.12.3
-                            OSPF area 0
-```
-
-Three separate Docker bridge networks represent the client LAN, transit link, and server LAN, with IP masquerading disabled. Endpoints use the FRR routers as default gateways; routers explicitly remove Docker's default routes. OSPF advertises the remote LANs, using explicit unicast neighbours on a non-broadcast transit network. Docker's `internal` bridge option is intentionally not used: its subnet filtering blocked routed traffic during validation. These bridges are a local test topology, not a security boundary against the Docker host.
-
-The API shares the `api-net` container's network namespace so routing can be configured without granting networking capabilities to the application itself. Docker exec provides management access independently of the tested network.
-
-The lab has no published API port: use the client to reach the API. The earlier localhost demo is a separate Compose project and is not used for routed tests. The lab script waits for convergence, checks Full neighbours and installed OSPF routes in both directions, verifies traceroute hops, checks API health, and saves evidence to `reports/lab-baseline.json`. This is a baseline check, not a completed AI report.
-
-Useful commands:
-
-```bash
-docker compose -f compose.lab.yaml exec r1 vtysh -c 'show ip ospf neighbor'
-docker compose -f compose.lab.yaml exec client curl --fail http://10.101.2.10:8000/devices
-docker compose -f compose.lab.yaml down
-```
-
-The containers' combined memory limits total 832 MiB; Docker/WSL overhead is additional. Address ranges must not overlap other Docker networks. The lab uses FRR 10.5.2 from the [official FRR registry](https://frrouting.org/release/10.5.2/) and Compose [interface naming](https://docs.docker.com/reference/compose-file/services/#interface_name) to keep router configuration stable. Router containers have elevated capabilities for FRR operation; use this isolated local lab for experiments.
-
-## pyATS network and application failure scenarios
-
-With the lab running and the Ubuntu virtual environment active:
-
-```bash
-python -m pip install -r requirements-network.txt
-python scripts/network_suite.py
-```
-
-The first scenario changes only `r1`'s `eth1` in the dedicated Compose lab. It requires a healthy baseline, verifies the interface goes down, checks that the API becomes unreachable, restores the interface in a `finally` block, and verifies routing and API recovery.
-
-The second scenario establishes a fresh healthy baseline, stops only the lab API container, verifies its stopped state, confirms that OSPF, routes, and the network path still work, and verifies HTTP unavailability. The separate `api-net` container keeps the API host network alive. The scenario restarts the API in a `finally` block and verifies full recovery. Thus the evidence distinguishes a broken routed path from a stopped application on a healthy path.
-
-Common cleanup retries restoration when necessary, attempting both resources even if one fails. Forced process termination or a Docker failure can prevent cleanup; restore manually with these commands, then rerun the baseline:
+Do not run the standalone fault suite concurrently with a dashboard or CLI pipeline. If a run is forcibly interrupted, restore the lab and check health:
 
 ```bash
 docker compose -f compose.lab.yaml exec r1 ip link set eth1 up
@@ -213,45 +188,54 @@ docker compose -f compose.lab.yaml start api
 python scripts/check_lab.py
 ```
 
-Evidence is saved in `reports/network-evidence.json`, including any cleanup error (the combined command instead uses its own run directory). The recovery check has a 90-second target (individual subprocesses have their own bounded timeouts). Raw test evidence keeps `workflow_complete` false because the separate required AI stage has not yet run at evidence collection time. Run only one fault test at a time against this shared lab. The structure follows [pyATS setup/test/cleanup conventions](https://devnet-pubhub-site.s3.amazonaws.com/media/pyats/docs/aetest/structure.html).
-
-## Planned workflow
-
-YAML configuration → baseline network and API checks → controlled lab fault → verify disruption → restore original state → verify recovery → collect evidence → required AI analysis → HTML report.
-
-## GitHub checks
-
-The `.github/workflows/ci.yml` workflow runs on pushes and pull requests. It installs Python 3.12 dependencies, runs API and simulated AI/pipeline tests, validates both Compose files, and builds and tests the standalone API container. It requires no Groq key. It does not run the FRR fault suite or live AI analysis; those remain local integration checks.
-
-Publish the contents of **netapp-assure** as the repository root so GitHub discovers the workflow. This folder has not yet been published by this setup. The workflow uses the official [checkout](https://github.com/actions/checkout) and [setup-python](https://github.com/actions/setup-python) actions. A successful local test run does not prove that GitHub CI has executed; check the Actions tab after pushing.
-
-## Remaining work
-
-- Verify the combined live pipeline from the Ubuntu terminal that holds the API key.
-- Pin a reproducible dependency set and add more failure scenarios.
-- Publish the repository and verify the GitHub Actions run.
-- Physical Cisco compatibility requires separate adapters and validation on actual equipment.
-
-## Selecting scenarios and test expectations
-
-The dashboard scenario selector and the pipeline command support `all`, `baseline`,
-`link`, and `application`. Every pipeline run includes required AI analysis.
-Baseline introduces no faults; link and application runs exercise only their selected fault.
-
-From Ubuntu with the virtual environment active:
+After all tests finish, stop the lab with:
 
 ```bash
-python scripts/run_project.py --validate-config
-python scripts/run_project.py --scenario baseline
-python scripts/run_project.py --scenario link
-python scripts/run_project.py --scenario application
-python scripts/run_project.py --scenario all
+docker compose -f compose.lab.yaml down
 ```
 
-Edit `config/lab.yaml` for expected OSPF peers/routes, HTTP path, status and JSON body,
-traceroute hops, and request/recovery timeouts. Invalid settings stop the pipeline
-before tests start. These are test expectations, not router configuration changes.
-Fault targets remain the fixed local Docker lab. Physical device support is not implemented.
-Use `--config config/lab.yaml` to select a configuration file from the CLI.
-Each pipeline report directory saves `configuration.yaml` for reproducibility.
-The dashboard uses `config/lab.yaml` and overrides its scenario with your selection.
+## Testing
+
+```bash
+python -m pytest -q
+```
+
+[GitHub Actions](https://github.com/vnagaven2003/NetApp-Assure/actions) runs API and mocked AI/pipeline tests, validates Compose files, and builds and checks the standalone API. CI needs no Groq key and does not run the FRR fault suite or live AI analysis. Those are separate local integration checks.
+
+## Screenshots
+
+These examples show successful baseline and application runs, not proof of a completed `all` run.
+
+### Dashboard
+
+![Dashboard scenario selection and readiness](docs/screenshots/User%20attachment.png)
+
+### Baseline report
+
+No faults were selected, so link recovery is not recorded.
+
+![Baseline HTML report](docs/screenshots/Report_screenshot.png)
+
+### Baseline AI interpretation
+
+The AI statement "no packet loss" exceeds what the traceroute check proves; the check verifies the observed hop path, not packet loss.
+
+![Baseline AI interpretation](docs/screenshots/Report_screenshot1.png)
+
+### Application results
+
+Tests passed, AI completed, and the API recovered. Link recovery is not recorded for an application-only run.
+
+![Application results](docs/screenshots/results_interface.png)
+
+### Application AI explanation
+
+![Application outage and recovery explanation](docs/screenshots/AI_Explanation.png)
+
+## Scope & Limitations
+
+- Supports the fixed local Docker lab. Physical Cisco switches and routers require additional adapters and validation.
+- The topology has one routed path; the link scenario tests outage and restoration, not backup-path failover.
+- Checks are sampled observations, not continuous monitoring or performance measurements.
+- AI evidence references are validated, but the explanation still requires human review.
+- The API inventory is sample data, not discovered devices. The dashboard is intended for local use.
